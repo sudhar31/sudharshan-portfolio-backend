@@ -1,58 +1,112 @@
 from flask import Flask, request, jsonify
-import os
-import requests
-from dotenv import load_dotenv
 from flask_cors import CORS
+from dotenv import load_dotenv
+from google import genai
+import os
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-# Load environment variables from .env (optional but recommended)
-load_dotenv()
+# Gemini API configuration
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-API_URL = "https://router.huggingface.co/v1/chat/completions"
-HF_TOKEN = os.getenv("HF_TOKEN")  # Or hardcode for now, but .env is safer
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY is not configured in the .env file")
 
-headers = {
-    "Authorization": f"Bearer {HF_TOKEN}",
-    "Content-Type": "application/json"
-}
+client = genai.Client(api_key=GEMINI_API_KEY)
 
-def query_huggingface(prompt):
-    payload = {
-        "model": "meta-llama/Llama-3.2-3B-Instruct:novita",
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        "temperature": 0.7,
-        "max_tokens": 200
-    }
+SYSTEM_PROMPT = """
+You are ShanAI, the personal AI assistant for Sudharshan's portfolio website.
 
-    try:
-        response = requests.post(API_URL, headers=headers, json=payload)
-        data = response.json()
+Your job is to help visitors learn about Sudharshan professionally.
 
-        if "choices" in data:
-            return data["choices"][0]["message"]["content"]
-        else:
-            return f"⚠️ HuggingFace Error: {data.get('error', 'No details')}"
-    except Exception as e:
-        return f"❌ Internal Error: {str(e)}"
+You can answer questions about:
+- Sudharshan's professional background
+- Software engineering experience
+- Technical skills
+- Java and Spring Boot
+- Angular and frontend development
+- Python and Flask
+- Quantum releated contents
+- AI and API integration
+- Projects
+- Education
+- Certifications and courses
+- Contact and professional opportunities
+
+Be friendly, concise, professional, and helpful.
+
+Do not invent information about Sudharshan.
+If you do not have enough information to answer something about him,
+say that the information is not available in the portfolio.
+
+If someone asks how to contact Sudharshan, direct them to the
+Contact section of the portfolio.
+
+Keep responses reasonably short because ShanAI is designed as a
+portfolio assistant.
+"""
+
+
+def query_gemini(question):
+    models = [
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.5-flash",
+        "gemini-2.5-flash"
+    ]
+
+    for model_name in models:
+        try:
+            print(f"Trying Gemini model: {model_name}")
+
+            response = client.models.generate_content(
+                model=model_name,
+                contents=f"""
+{SYSTEM_PROMPT}
+
+Visitor's question:
+{question}
+"""
+            )
+
+            if response.text:
+                print(f"Successfully responded using: {model_name}")
+                return response.text.strip()
+
+        except Exception as e:
+            print(f"{model_name} failed: {e}")
+
+    return "Sorry, ShanAI is temporarily unavailable. Please try again later."
 
 @app.route("/ask", methods=["POST"])
 def ask():
-    data = request.get_json()
-    question = data.get("question")
+    data = request.get_json(silent=True) or {}
+
+    question = data.get("question", "").strip()
 
     if not question:
-        return jsonify({"error": "Missing 'question' field"}), 400
+        return jsonify({
+            "response": "Please enter a question."
+        }), 400
 
-    response = query_huggingface(question)
-    return jsonify({"response": response})
+    response = query_gemini(question)
+
+    return jsonify({
+        "response": response
+    })
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({
+        "status": "ok",
+        "service": "ShanAI"
+    })
+
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)

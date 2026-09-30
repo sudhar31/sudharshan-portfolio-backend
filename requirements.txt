@@ -1,4 +1,6 @@
 flask
-flask_cors
 requests
+flask-cors
 python-dotenv
+google-genai
+gunicorn
