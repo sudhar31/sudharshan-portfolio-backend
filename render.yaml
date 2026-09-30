@@ -2,8 +2,8 @@ services:
   - type: web
     name: sudharshan-portfolio-backend
     env: python
-    buildCommand: ""
-    startCommand: "python app.py"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn --bind 0.0.0.0:$PORT app:app"
     envVars:
-      - key: OPENAI_API_KEY
-        sync: false  # Set in dashboard
+      - key: GEMINI_API_KEY
+        sync: false
